@@ -1,0 +1,108 @@
+# Single source of truth for the LiteLLM router fleet.
+# Copy to main.yaml, adjust to your accounts, then run `uv run generate.py`;
+# output lands in generated/. main.yaml is gitignored — your account layout
+# stays local.
+
+lmstudio_base: http://host.docker.internal:1234/v1
+
+# Each non-local account becomes its own sidecar container (subscription auth
+# binds one identity per process). `port` is published on 127.0.0.1 for
+# first-run OAuth device flows and debugging.
+accounts:
+  copilot-1:
+    type: github_copilot
+    port: 4001
+  copilot-2:
+    type: github_copilot
+    port: 4002
+  chatgpt-1:
+    type: chatgpt
+    port: 4003
+  chatgpt-2:
+    type: chatgpt
+    port: 4004
+  claude-1:
+    # Meridian bridge wrapping the Claude Code SDK. To enable:
+    #   git clone https://github.com/rynfar/meridian vendor/meridian
+    #   claude setup-token   -> paste into tokens/claude-1/token
+    #   set enabled: true, then regenerate.
+    # ToS note: prohibited by Anthropic's Feb 2026 terms; chat traffic currently
+    # works, tool-heavy traffic gets rejected; account enforcement risk is real.
+    type: claude_code_bridge
+    port: 4005
+    enabled: false
+  bedrock-1:
+    # Long-term Bedrock API key auth (no OAuth device flow): paste the key
+    # into tokens/bedrock-1/token (created on first `generate.py` run), then
+    # restart this sidecar. Add more bedrock-N accounts for more AWS orgs/keys
+    # — each is its own sidecar, same as copilot-1/copilot-2.
+    type: bedrock
+    region: eu-west-1
+    port: 4006
+    enabled: false
+  local:
+    type: lm_studio
+
+# Model aliases clients call. `chain` is strict priority order: first entry
+# tried first; on quota exhaustion (429 -> cooldown) the next takes over.
+# `model` is the upstream model name requested from each account, unless
+# overridden per-account in `model_overrides` (accounts' catalogs use
+# different names/IDs for the "same" model — Copilot's "claude-sonnet-4.5",
+# a Bedrock model ID/inference-profile ARN, etc).
+# `endpoint: responses` pins the model to the responses API in wildcard
+# sidecars, for upstreams that don't serve /chat/completions (Copilot gpt-5.5).
+aliases:
+  gpt-5.5:
+    model: gpt-5.5
+    endpoint: responses
+    chain:
+      - chatgpt-1
+      - copilot-1
+      - copilot-2
+      - chatgpt-2
+  sonnet-4.6:
+    model: sonnet-4.6
+    model_overrides:
+      copilot-1: claude-sonnet-4.6
+      copilot-2: claude-sonnet-4.6
+      bedrock-1: arn:aws:bedrock:eu-west-1:<ACCOUNT_ID>:inference-profile/eu.anthropic.claude-sonnet-4-6
+    chain:
+      - claude-1
+      - copilot-1
+      - copilot-2
+      - bedrock-1
+  opus-4.8:
+    model: opus-4.8
+    model_overrides:
+      copilot-1: claude-opus-4.8
+      copilot-2: claude-opus-4.8
+      bedrock-1: arn:aws:bedrock:eu-west-1:<ACCOUNT_ID>:inference-profile/eu.anthropic.claude-opus-4-8
+    chain:
+      - claude-1
+      - copilot-1
+      - copilot-2
+      - bedrock-1
+
+  local:
+    model: qwen/qwen3.5-9b
+    chain: [local]
+
+# Local model name used when `local` appears in a chain as fallback.
+local_model: qwen/qwen3.5-9b
+
+# Projects -> virtual keys. `accounts: all` = every account.
+# A restricted project gets aliases named "<project>/<alias>" containing only
+# its allowed accounts, plus a virtual key locked to those models.
+projects:
+  default:
+    accounts: all
+  example-project:
+    accounts:
+      - copilot-1
+      - chatgpt-1
+      - local
+
+router:
+  num_retries: 2
+  allowed_fails: 1
+  cooldown_time: 300 # seconds an exhausted deployment is out of rotation

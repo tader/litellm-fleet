@@ -1,0 +1,13 @@
+generated/
+tokens/
+main.yaml
+slides.html
+*.pyc
+__pycache__/
+.venv/
+.DS_Store
+LiteLLMBar/build/
+LiteLLMBar/**/xcuserdata/
+vendor/
+LiteLLMBar/.build/
+LiteLLMBar/dist/
