@@ -92,6 +92,7 @@ haiku="$(grep -E '(^|[-_/])haiku' <<<"$models" | head -1 || true)"
 mkdir -p .claude
 existing="{}"
 [[ -f "$SETTINGS" ]] && existing="$(jq -c '.' "$SETTINGS" 2>/dev/null || echo '{}')"
+jq -n --argjson base "$existing" \
       --arg url "$BASE_URL" --arg key "$key" --arg model "$model" --arg haiku "$haiku" '
   $base * {env: (($base.env // {}) + {
     ANTHROPIC_BASE_URL: $url,
