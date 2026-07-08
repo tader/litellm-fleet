@@ -77,8 +77,9 @@ def main() -> int:
         alias = f"project-{stale}"
         try:
             api("/key/delete", master_key, {"key_aliases": [alias]})
-        except urllib.error.HTTPError:
-            pass
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
         del keys[stale]
         print(f"{stale}: pruned (not in main.yaml)")
 
