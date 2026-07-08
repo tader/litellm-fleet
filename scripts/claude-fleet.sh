@@ -91,8 +91,7 @@ haiku="$(grep -E '(^|/)haiku' <<<"$models" | head -1 || true)"
 # --- write settings.local.json (merge, preserve unrelated keys) ---------------
 mkdir -p .claude
 existing="{}"
-[[ -f "$SETTINGS" ]] && existing="$(cat "$SETTINGS")"
-jq -n --argjson base "$existing" \
+[[ -f "$SETTINGS" ]] && existing="$(jq -c '.' "$SETTINGS" 2>/dev/null || echo '{}')"
       --arg url "$BASE_URL" --arg key "$key" --arg model "$model" --arg haiku "$haiku" '
   $base * {env: (($base.env // {}) + {
     ANTHROPIC_BASE_URL: $url,
