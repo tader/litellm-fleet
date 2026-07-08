@@ -3,4 +3,4 @@ name = "litellm-ui"
 version = "0.1.0"
 description = "Generator for a multi-account LiteLLM subscription router fleet"
 requires-python = ">=3.12"
-dependencies = ["pyyaml>=6.0"]
+dependencies = ["pyyaml>=6.0", "rich>=13.0"]

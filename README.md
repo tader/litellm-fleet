@@ -24,7 +24,7 @@ copilot-1 copilot-2 chatgpt-1 chatgpt-2 [claude]  lmstudio (host :1234)
 cp main.example.yaml main.yaml                        # then edit: your accounts, aliases, projects
 uv run generate.py                                    # main.yaml -> generated/
 docker-compose -f generated/docker-compose.yml up -d  # start fleet
-scripts/auth.sh                                       # one-time OAuth per account (interactive)
+scripts/auth.sh                                       # interactive auth helper (see below)
 uv run scripts/sync-keys.py                           # per-project virtual keys -> generated/keys.json
 LiteLLMBar/build.sh --install                         # menu bar app
 ```
@@ -56,20 +56,31 @@ export OPENAI_API_KEY=<key from generated/keys.json, or master key>
 To wire Claude Code, Codex, OpenCode, or Copilot (CLI and desktop/IDE) at the
 router, see [CLIENTS.md](CLIENTS.md).
 
-### ChatGPT account blocks the device flow?
+## Auth helper
 
-`scripts/auth.sh` uses the OAuth **device flow**; some ChatGPT accounts disallow
-it. Log in with the official Codex CLI instead (authorization-code + PKCE,
-browser redirect — not a device code), then transplant the session:
+`scripts/auth.sh` (a wrapper for `uv run scripts/auth.py`) is an interactive
+TUI that guides authentication for every configured account:
+
+- status table for all accounts — JWTs are decoded so you can see which
+  identity a token belongs to, plus expiry
+- guided OAuth **device flows** (copilot/chatgpt): extracts the URL + user
+  code from the sidecar's container logs, detects stale codes (>15 min) and
+  offers a container restart to mint a fresh one
+- imports credentials already on your machine instead of re-authing:
+  `~/.codex/auth.json` (Codex CLI login — useful when a ChatGPT account
+  blocks the device flow; the refresh token is interchangeable between
+  flows), `~/.config/github-copilot/{apps,hosts}.json`, and
+  `~/.claude/.credentials.json`
+- manual token paste for `claude setup-token` output and Bedrock API keys,
+  with a decoded-JWT preview before writing
+- "delete current auth and start over" for when a flow went sideways
+
+`scripts/codex-import.py` remains available standalone:
 
 ```sh
 codex login                        # writes ~/.codex/auth.json
 uv run scripts/codex-import.py     # menu of chatgpt targets; --account to skip
 ```
-
-The refresh token is interchangeable between flows, so LiteLLM keeps the session
-alive afterward. Restarts the chosen sidecar automatically (`--no-restart` to
-skip).
 
 Failover: quota-exhausted deployment (429) is benched for `cooldown_time`
 seconds, next in chain takes over; LMStudio is the never-benched last resort.
