@@ -369,7 +369,10 @@ def container_device_prompt(acct: Account) -> tuple[str, str, float] | None:
 
 
 def _log_timestamp(line: str) -> float | None:
-    m = re.match(r"\S+\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+    m = re.search(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",
+        line,
+    )
     if not m:
         return None
     try:
