@@ -13,7 +13,16 @@
 #   ccf -- --resume ...  # everything after flags is passed to claude
 set -euo pipefail
 
-FLEET_ROOT="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if command -v realpath >/dev/null 2>&1; then
+  SCRIPT_PATH="$(realpath "$SCRIPT_PATH")"
+elif command -v python3 >/dev/null 2>&1; then
+  SCRIPT_PATH="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_PATH")"
+else
+  echo "ccf: missing dependency: realpath (or python3 for fallback)" >&2
+  exit 1
+fi
+FLEET_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 KEYS_JSON="$FLEET_ROOT/generated/keys.json"
 SETTINGS=".claude/settings.local.json"
 
