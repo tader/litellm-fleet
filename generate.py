@@ -225,16 +225,20 @@ def compose_config(cfg: dict) -> dict:
             # token file at container start, same tokens/ convention as the
             # other sidecars. The image entrypoint ends with `exec "$@"`, so
             # the command below runs as its args.
+            internal_port = acct.get("internal_port", 3456)
             services[name] = {
                 "build": {"context": "../vendor/meridian"},
-                "environment": {"MERIDIAN_DEFAULT_PROFILE": "main"},
+                "environment": {
+                    "MERIDIAN_DEFAULT_PROFILE": "main",
+                    "MERIDIAN_PORT": str(internal_port),
+                },
                 "command": [
                     "sh", "-c",
                     'export MERIDIAN_PROFILES="[{\\"id\\":\\"main\\",'
                     '\\"oauthToken\\":\\"$(cat /tokens/token)\\"}]" && '
                     "exec ./bin/claude-proxy-supervisor.sh",
                 ],
-                "ports": [f"127.0.0.1:{acct['port']}:{acct.get('internal_port', 3456)}"],
+                "ports": [f"127.0.0.1:{acct['port']}:{internal_port}"],
                 "volumes": [f"../tokens/{name}/token:/tokens/token:ro"],
                 "restart": "unless-stopped",
             }
@@ -243,15 +247,16 @@ def compose_config(cfg: dict) -> dict:
             # AWS_BEARER_TOKEN_BEDROCK env var (boto3-global, one value per
             # process) — read it from the token file at container start,
             # same tokens/ convention as the OAuth sidecars.
+            internal_port = acct.get("internal_port", 4000)
             services[name] = {
                 "image": LITELLM_IMAGE,
                 # override the image's `litellm` entrypoint so `sh -c` runs instead
                 "entrypoint": ["sh", "-c"],
                 "command": [
                     "export AWS_BEARER_TOKEN_BEDROCK=$(cat /tokens/token) && "
-                    "exec litellm --config /config.yaml --port 4000",
+                    f"exec litellm --config /config.yaml --port {internal_port}",
                 ],
-                "ports": [f"127.0.0.1:{acct['port']}:4000"],
+                "ports": [f"127.0.0.1:{acct['port']}:{internal_port}"],
                 "volumes": [
                     f"./{name}.yaml:/config.yaml:ro",
                     f"../tokens/{name}/token:/tokens/token:ro",
@@ -259,11 +264,12 @@ def compose_config(cfg: dict) -> dict:
                 "restart": "unless-stopped",
             }
         else:
+            internal_port = acct.get("internal_port", 4000)
             services[name] = {
                 "image": LITELLM_IMAGE,
-                "command": ["--config", "/config.yaml", "--port", "4000"],
+                "command": ["--config", "/config.yaml", "--port", str(internal_port)],
                 "environment": {TOKEN_DIR_ENV[acct["type"]]: "/tokens"},
-                "ports": [f"127.0.0.1:{acct['port']}:4000"],
+                "ports": [f"127.0.0.1:{acct['port']}:{internal_port}"],
                 "volumes": [
                     f"./{name}.yaml:/config.yaml:ro",
                     f"../tokens/{name}:/tokens",
@@ -273,6 +279,7 @@ def compose_config(cfg: dict) -> dict:
         router_deps[name] = {"condition": "service_started"}
 
     router_deps["postgres"] = {"condition": "service_healthy"}
+    router_port = cfg.get("router", {}).get("port", 4000)
     services["router"] = {
         "image": LITELLM_IMAGE,
         "command": ["--config", "/config.yaml", "--port", "4000"],
@@ -280,7 +287,7 @@ def compose_config(cfg: dict) -> dict:
             "LITELLM_MASTER_KEY": "${LITELLM_MASTER_KEY}",
             "DATABASE_URL": "postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm",
         },
-        "ports": ["127.0.0.1:4000:4000"],
+        "ports": [f"127.0.0.1:{router_port}:4000"],
         "volumes": ["./router.yaml:/config.yaml:ro"],
         "depends_on": router_deps,
         "extra_hosts": ["host.docker.internal:host-gateway"],
@@ -316,6 +323,26 @@ def main() -> int:
         if acct["type"] == "claude_code_bridge" and not (ROOT / "vendor" / "meridian" / "Dockerfile").exists():
             sys.exit(f"account {name!r}: clone the bridge first: "
                      "git clone https://github.com/rynfar/meridian vendor/meridian")
+
+    # Validate host ports: every sidecar needs one, and none may collide
+    # (with each other or with the router's published port).
+    router_port = cfg.get("router", {}).get("port", 4000)
+    if not isinstance(router_port, int):
+        sys.exit(f"router: port must be an integer, got {router_port!r}")
+    used_ports: dict[int, str] = {router_port: "router"}
+    for name, acct in sidecar_accounts(cfg).items():
+        port = acct.get("port")
+        if not isinstance(port, int):
+            sys.exit(f"account {name!r}: integer `port` is required "
+                     f"(got {port!r})")
+        internal_port = acct.get("internal_port")
+        if internal_port is not None and not isinstance(internal_port, int):
+            sys.exit(f"account {name!r}: internal_port must be an integer "
+                     f"(got {internal_port!r})")
+        if port in used_ports:
+            sys.exit(f"account {name!r}: port {port} already used by "
+                     f"{used_ports[port]!r}")
+        used_ports[port] = name
 
     if args.check:
         print("main.yaml OK")

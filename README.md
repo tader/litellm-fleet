@@ -38,8 +38,8 @@ docker-compose, uv, LMStudio serving on :1234.
 - `aliases` — model names clients call; `chain` is strict priority order
 - `projects` — per-project account allowlists; restricted projects call
   `<project>/<alias>` model names with their own key
-- `router` — retry/cooldown tuning (`cooldown_time` = how long an exhausted
-  account stays benched)
+- `router` — published port (`port`, default 4000) and retry/cooldown tuning
+  (`cooldown_time` = how long an exhausted account stays benched)
 
 After editing: `uv run generate.py && docker-compose -f generated/docker-compose.yml up -d`
 (or menu bar → Regenerate Configs), then `uv run scripts/sync-keys.py` if

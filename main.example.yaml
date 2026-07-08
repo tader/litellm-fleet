@@ -7,7 +7,9 @@ lmstudio_base: http://host.docker.internal:1234/v1
 
 # Each non-local account becomes its own sidecar container (subscription auth
 # binds one identity per process). `port` is published on 127.0.0.1 for
-# first-run OAuth device flows and debugging.
+# first-run OAuth device flows and debugging. Optional `internal_port` changes
+# the port the process listens on inside its container (default 4000; 3456
+# for claude_code_bridge) — normally unnecessary.
 accounts:
   copilot-1:
     type: github_copilot
@@ -103,6 +105,7 @@ projects:
       - local
 
 router:
+  port: 4000 # host port the router is published on (127.0.0.1)
   num_retries: 2
   allowed_fails: 1
   cooldown_time: 300 # seconds an exhausted deployment is out of rotation
