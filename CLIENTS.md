@@ -36,6 +36,13 @@ Claude Code speaks the Anthropic Messages API, and LiteLLM translates
 `/v1/messages` onto whatever backend the alias resolves to — so you can point it
 at *any* model in the fleet, not only `claude`.
 
+**Quick start — `ccf`** (`scripts/claude-fleet.sh`, symlinked as `~/.local/bin/ccf`):
+run `ccf` in any working directory to pick a fleet project + default model
+(project list from `generated/keys.json`, models from the router's `/v1/models`
+for that key), persist them in that directory's `.claude/settings.local.json`,
+and launch `claude`. Later runs launch directly; `ccf -c` re-picks,
+`ccf -n` configures without launching. The manual equivalent:
+
 `~/.claude/settings.json` (or a project `.claude/settings.json`):
 
 ```json
