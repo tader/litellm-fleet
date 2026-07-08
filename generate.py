@@ -335,6 +335,10 @@ def main() -> int:
         if not isinstance(port, int):
             sys.exit(f"account {name!r}: integer `port` is required "
                      f"(got {port!r})")
+        internal_port = acct.get("internal_port")
+        if internal_port is not None and not isinstance(internal_port, int):
+            sys.exit(f"account {name!r}: internal_port must be an integer "
+                     f"(got {internal_port!r})")
         if port in used_ports:
             sys.exit(f"account {name!r}: port {port} already used by "
                      f"{used_ports[port]!r}")
