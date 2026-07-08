@@ -194,17 +194,28 @@ def _copilot_status(acct: Account) -> None:
     tok = access.read_text().strip()
     acct.state = "[green]authed[/]"
     acct.identity = jwt_identity(tok) or f"GitHub token {mask(tok)}"
-    if api_key.exists():
-        try:
-            data = json.loads(api_key.read_text())
-            exp = data.get("expires_at")
-            if not exp:
-                m = re.search(r"exp=(\d+)", str(data.get("token", "")))
-                exp = int(m.group(1)) if m else None
-            # api-key auto-refreshes off the access token; show info only
-            acct.expiry = fmt_expiry(exp)
-        except (ValueError, OSError):
-            pass
+    # The GitHub OAuth token in access-token is long-lived; api-key.json is a
+    # short-lived Copilot API key that LiteLLM automatically re-mints from it
+    # on the next request. A past expiry there is normal (idle sidecar), not
+    # an auth problem — communicate it as informational, never as an error.
+    if not api_key.exists():
+        acct.expiry = "[dim]api key minted on first request[/]"
+        return
+    try:
+        data = json.loads(api_key.read_text())
+        exp = data.get("expires_at")
+        if not exp:
+            m = re.search(r"exp=(\d+)", str(data.get("token", "")))
+            exp = int(m.group(1)) if m else None
+        if isinstance(exp, (int, float)):
+            if exp < time.time():
+                acct.expiry = ("[dim]api key stale (auto-renews on next "
+                               "request)[/]")
+            else:
+                acct.expiry = (f"[green]api key valid {fmt_age(exp - time.time())}[/] "
+                               "[dim](auto-renews)[/]")
+    except (ValueError, OSError):
+        pass
 
 
 def _token_file_status(acct: Account) -> None:
