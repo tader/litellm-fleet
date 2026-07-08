@@ -85,7 +85,7 @@ else
 fi
 
 # --- haiku/background model: haiku alias visible to this key, else local ----
-haiku="$(grep -E '(^|/)haiku' <<<"$models" | head -1 || true)"
+haiku="$(grep -E '(^|[-_/])haiku' <<<"$models" | head -1 || true)"
 [[ -n "$haiku" ]] || haiku="$(grep -qxF local <<<"$models" && echo local || echo "$model")"
 
 # --- write settings.local.json (merge, preserve unrelated keys) ---------------
