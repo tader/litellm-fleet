@@ -385,6 +385,11 @@ def _log_timestamp(line: str) -> float | None:
 
 def trigger_request(acct: Account) -> None:
     """Fire one tiny request so LiteLLM starts the device flow (blocks until auth)."""
+    if acct.port is None:
+        console.print(
+            f"[red]{acct.name} has no port configured in main.yaml; cannot trigger device flow.[/]"
+        )
+        return
     body = json.dumps({
         "model": TRIGGER_MODEL.get(acct.type, "gpt-5"),
         "messages": [{"role": "user", "content": "hi"}],
