@@ -282,6 +282,8 @@ def discover_copilot() -> list[FoundAuth]:
             data = json.loads(path.read_text())
         except (ValueError, OSError):
             continue
+        if not isinstance(data, dict):
+            continue
         for key, entry in data.items():
             token = entry.get("oauth_token") if isinstance(entry, dict) else None
             if not token:
