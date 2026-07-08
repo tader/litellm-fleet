@@ -46,7 +46,9 @@ def main() -> int:
     keys_path = ROOT / "generated" / "keys.json"
     keys = json.loads(keys_path.read_text()) if keys_path.exists() else {}
 
-    for project in cfg["projects"]:
+    projects = list(cfg["projects"])
+
+    for project in projects:
         alias = f"project-{project}"
         models = [alias]  # access group name doubles as the models entry
         existing = keys.get(project)
@@ -60,10 +62,26 @@ def main() -> int:
                 if e.code != 404:
                     raise
                 print(f"{project}: stored key gone upstream, regenerating")
+        # No usable stored key. The alias may already exist upstream (from an
+        # earlier sync whose plaintext we never recorded), and aliases must be
+        # unique — so delete by alias first, then create fresh. Idempotent:
+        # deleting a nonexistent alias is a no-op.
+        api("/key/delete", master_key, {"key_aliases": [alias]})
         resp = api("/key/generate", master_key,
                    {"key_alias": alias, "models": models})
         keys[project] = resp["key"]
         print(f"{project}: created ({resp['key'][:12]}...)")
+
+    # Prune keys for projects no longer in main.yaml (e.g. renamed/removed).
+    for stale in [p for p in keys if p not in projects]:
+        alias = f"project-{stale}"
+        try:
+            api("/key/delete", master_key, {"key_aliases": [alias]})
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+        del keys[stale]
+        print(f"{stale}: pruned (not in main.yaml)")
 
     keys_path.write_text(json.dumps(keys, indent=2) + "\n")
     print(f"wrote {keys_path}")
