@@ -60,7 +60,7 @@ def jwt_claims(token: str) -> dict:
         payload = token.split(".")[1]
         payload += "=" * (-len(payload) % 4)
         return json.loads(base64.urlsafe_b64decode(payload))
-    except (IndexError, ValueError):
+    except Exception:
         return {}
 
 
