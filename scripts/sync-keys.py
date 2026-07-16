@@ -17,12 +17,27 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).parent.parent
-BASE = "http://127.0.0.1:4000"
 
 
-def api(path: str, master_key: str, payload: dict | None = None) -> dict:
+def router_base(cfg: dict) -> str:
+    port = cfg.get("router", {}).get("port", 4000)
+    return f"http://127.0.0.1:{port}"
+
+
+def load_env(path: Path) -> dict[str, str]:
+    env = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env[key] = value.strip().strip("\"'")
+    return env
+
+
+def api(base: str, path: str, master_key: str, payload: dict | None = None) -> dict:
     req = urllib.request.Request(
-        BASE + path,
+        base + path,
         data=json.dumps(payload).encode() if payload is not None else None,
         headers={
             "Authorization": f"Bearer {master_key}",
@@ -30,17 +45,19 @@ def api(path: str, master_key: str, payload: dict | None = None) -> dict:
         },
         method="POST" if payload is not None else "GET",
     )
-    with urllib.request.urlopen(req) as resp:
-        return json.load(resp)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace").strip()
+        e.msg = f"{e.msg}: {detail}" if detail else e.msg
+        raise
 
 
 def main() -> int:
     cfg = yaml.safe_load((ROOT / "main.yaml").read_text())
-    env = dict(
-        line.split("=", 1)
-        for line in (ROOT / "generated" / ".env").read_text().splitlines()
-        if "=" in line
-    )
+    base = router_base(cfg)
+    env = load_env(ROOT / "generated" / ".env")
     master_key = env["LITELLM_MASTER_KEY"]
 
     keys_path = ROOT / "generated" / "keys.json"
@@ -54,7 +71,7 @@ def main() -> int:
         existing = keys.get(project)
         if existing:
             try:
-                api("/key/update", master_key,
+                api(base, "/key/update", master_key,
                     {"key": existing, "models": models})
                 print(f"{project}: updated ({existing[:12]}...)")
                 continue
@@ -66,8 +83,8 @@ def main() -> int:
         # earlier sync whose plaintext we never recorded), and aliases must be
         # unique — so delete by alias first, then create fresh. Idempotent:
         # deleting a nonexistent alias is a no-op.
-        api("/key/delete", master_key, {"key_aliases": [alias]})
-        resp = api("/key/generate", master_key,
+        api(base, "/key/delete", master_key, {"key_aliases": [alias]})
+        resp = api(base, "/key/generate", master_key,
                    {"key_alias": alias, "models": models})
         keys[project] = resp["key"]
         print(f"{project}: created ({resp['key'][:12]}...)")
@@ -76,7 +93,7 @@ def main() -> int:
     for stale in [p for p in keys if p not in projects]:
         alias = f"project-{stale}"
         try:
-            api("/key/delete", master_key, {"key_aliases": [alias]})
+            api(base, "/key/delete", master_key, {"key_aliases": [alias]})
         except urllib.error.HTTPError as e:
             if e.code != 404:
                 raise

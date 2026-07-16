@@ -28,6 +28,7 @@ import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -350,35 +351,48 @@ def container_device_prompt(acct: Account) -> tuple[str, str, float] | None:
     )
     if r.returncode != 0:
         return None
-    url = code = ts = None
+    prompts: list[dict[str, object]] = []
     for line in r.stdout.splitlines():
         m_url = DEVICE_URL_RE.search(line)
         if m_url:
             url = m_url.group(0).rstrip(".,)")
-            ts = _log_timestamp(line)
+            prompt = {"url": url, "code": None, "ts": _log_timestamp(line)}
+            prompts.append(prompt)
             # code is usually on the same or a nearby line
             m_code = DEVICE_CODE_RE.search(line.split(url)[-1]) or DEVICE_CODE_RE.search(line)
             if m_code:
-                code = m_code.group(1)
-        elif url and not code:
+                prompt["code"] = m_code.group(1)
+        elif prompts and not prompts[-1]["code"]:
             m_code = re.search(r"code[:\s]+([A-Z0-9-]{6,12})", line, re.I)
             if m_code:
-                code = m_code.group(1)
-    if not url:
+                prompts[-1]["code"] = m_code.group(1)
+    if not prompts:
         return None
+    prompt = next((p for p in reversed(prompts) if p["code"]), prompts[-1])
+    url = str(prompt["url"])
+    code = str(prompt["code"] or "(see logs)")
+    ts = prompt["ts"]
     age = time.time() - ts if ts else float("inf")
-    return url, code or "(see logs)", age
+    return url, code, age
 
 
 def _log_timestamp(line: str) -> float | None:
     m = re.search(
-        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?",
         line,
     )
     if not m:
         return None
     try:
-        return time.mktime(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S"))
+        frac = f".{m.group(2)[:6]:0<6}" if m.group(2) else ""
+        tz = m.group(3) or ""
+        if tz == "Z":
+            tz = "+00:00"
+        stamp = f"{m.group(1)}{frac}{tz}"
+        dt = datetime.fromisoformat(stamp)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
     except ValueError:
         return None
 
